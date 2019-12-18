@@ -25,5 +25,12 @@ services:
   client:
     depends_on:
       - origin
+      - proxy
     image: marselester/capacity
-    command: /bin/client -worker=${CLIENT_WORKER} -rps=${CLIENT_RPS} -origin=http://origin:8000
+    command: /bin/client -worker=${CLIENT_WORKER} -rps=${CLIENT_RPS} -origin=${CLIENT_ORIGIN}
+
+  proxy:
+    depends_on:
+      - origin
+    image: marselester/capacity
+    command: /bin/proxy -quota=${PROXY_QUOTA} -adaptive=${PROXY_ADAPTIVE} -origin=http://origin:8000

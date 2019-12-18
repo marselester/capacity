@@ -9,3 +9,6 @@ scrape_configs:
   - job_name: 'client'
     static_configs:
       - targets: ['client:8080']
+  - job_name: 'proxy'
+    static_configs:
+      - targets: ['proxy:7000']
