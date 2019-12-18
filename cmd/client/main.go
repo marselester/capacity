@@ -40,7 +40,6 @@ func main() {
 
 	// limiter throttles requests that exceeded rps requests per second.
 	limiter := rate.NewLimiter(rate.Limit(*rps), int(*rps))
-	limiter.Allow()
 
 	ctx := context.Background()
 
