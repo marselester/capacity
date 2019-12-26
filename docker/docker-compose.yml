@@ -34,3 +34,7 @@ services:
       - origin
     image: marselester/capacity
     command: /bin/proxy -quota=${PROXY_QUOTA} -adaptive=${PROXY_ADAPTIVE} -origin=http://origin:8000
+    environment:
+      - GOMAXPROCS=4
+    ports:
+      - 7000:7000
