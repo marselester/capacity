@@ -5,10 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"net/http/httputil"
+	_ "net/http/pprof"
 	"net/url"
-	"sync"
+	"runtime"
+	"sync/atomic"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -18,9 +21,11 @@ import (
 func main() {
 	originAddr := flag.String("origin", "http://localhost:8000", "origin address where to proxy requests")
 	addr := flag.String("addr", ":7000", "address to listen to")
-	quota := flag.Float64("quota", 5, "allowed number of concurrent requests")
+	quota := flag.Int64("quota", 5, "allowed number of concurrent requests")
 	adaptive := flag.Bool("adaptive", false, "adaptive capacity control")
 	flag.Parse()
+
+	runtime.SetMutexProfileFraction(5)
 
 	inflightRequests := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "proxy_inflight_requests",
@@ -82,16 +87,15 @@ func main() {
 
 // Quota is a limited quantity of requests allowed to be in-flight.
 type Quota struct {
-	mu   sync.RWMutex
-	used float64
-	max  float64
+	used int64
+	max  int64
 
 	current prometheus.Gauge
 	target  prometheus.Gauge
 }
 
 // NewQuota creates a quota of in-flight requests.
-func NewQuota(n float64, current, target prometheus.Gauge) *Quota {
+func NewQuota(n int64, current, target prometheus.Gauge) *Quota {
 	q := Quota{
 		max:     n,
 		current: current,
@@ -102,39 +106,31 @@ func NewQuota(n float64, current, target prometheus.Gauge) *Quota {
 
 // Receive fills quota by one and returns true if quota is available.
 func (q *Quota) Receive() bool {
-	q.mu.RLock()
-	available := q.used < q.max
-	q.mu.RUnlock()
+	used := atomic.LoadInt64(&q.used)
+	max := atomic.LoadInt64(&q.max)
+	available := used < max
 	// If quota became available here, it's still ok to reject the request.
 	if !available {
 		return false
 	}
 
-	q.mu.Lock()
-	available = q.used < q.max
-	if available {
-		q.used++
-		q.current.Inc()
-	}
-	q.mu.Unlock()
+	atomic.AddInt64(&q.used, 1)
+	q.current.Inc()
+
 	// If quota became unavailable here, it's still ok to process the request.
-	return available
+	return true
 }
 
 // Release frees up quota by one.
 func (q *Quota) Release() {
-	q.mu.Lock()
-	q.used--
-	q.mu.Unlock()
+	atomic.AddInt64(&q.used, -1)
 
 	q.current.Dec()
 }
 
 // Inc lifts quota by one.
 func (q *Quota) Inc() {
-	q.mu.Lock()
-	q.max++
-	q.mu.Unlock()
+	atomic.AddInt64(&q.max, 1)
 
 	q.target.Inc()
 }
@@ -142,9 +138,12 @@ func (q *Quota) Inc() {
 // Backoff sets target concurrency to a fraction p of its current size (0 <= p <= 1), e.g.,
 // back-off to 75% when a service is overloaded.
 func (q *Quota) Backoff(p float64) {
-	q.mu.Lock()
-	q.max = p * float64(q.max)
-	q.mu.Unlock()
-
-	q.target.Set(q.max)
+	for {
+		oldMax := atomic.LoadInt64(&q.max)
+		newMax := math.Ceil(p * float64(oldMax))
+		if atomic.CompareAndSwapInt64(&q.max, oldMax, int64(newMax)) {
+			q.target.Set(newMax)
+			break
+		}
+	}
 }

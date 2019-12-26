@@ -239,11 +239,11 @@ $ ORIGIN_WORKTIME=2s CLIENT_ORIGIN=http://proxy:7000 PROXY_ADAPTIVE=true docker-
 
 Observations:
 
-- client sends 5 requests per second and receives between 2.2 rps and 2.5 rps (HTTP 200)
-- proxy wildly oscillates between 4 and 8 in-flight requests
-- origin processes between 2.6 and 2.9 requests per second
-- origin has served requests with average latency 2 seconds
+- client sends 5 requests per second and receives between 2.4 rps and 2.7 rps (HTTP 200)
+- proxy oscillates between 4 and 6 in-flight requests
+- origin processes between 2.7 and 3 requests per second
+- origin has served requests with average latency 2.2 seconds
 - origin has served 50% of requests (50th percentile) within 2 seconds
-- origin has served 99% of requests (99th percentile) within 3 seconds
+- origin has served 99% of requests (99th percentile) within 3 seconds with periodic spikes
 
 ![Adaptive in-flight requests quota](images/adaptive-quota.png)
