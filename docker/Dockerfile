@@ -1,4 +1,4 @@
-FROM golang:1.13-alpine AS build
+FROM golang:1.16-alpine AS build
 LABEL stage=intermediate
 RUN apk add --no-cache git
 WORKDIR /opt/demo/
